@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kalóz Kvíz</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #startScreen, #quizContainer {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 90%;
+      max-width: 700px;
+    }
+
+    #startScreen.show, #quizContainer.show {
+      display: flex;
+    }
+
+    #logo {
+      width: 100px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 20px;
+    }
+
+    .answersRow {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      margin: 20px 0;
+    }
+
+    .answerOption {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+      font-weight: bold;
+      cursor: default; /* not clickable */
+      user-select: none;
+    }
+
+    .sand { background: khaki; color: black; }
+    .scarlet { background: #8A0303; color: white; }
+    .dirtyblue { background: #3A5F7D; color: white; }
+
+    /* correct: only green outline */
+    .correct { box-shadow: 0 0 0 4px rgba(76,175,80,1) inset; outline: 4px solid #4CAF50; outline-offset: -4px; }
+
+    #timer {
+      margin-top: 10px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: red;
+      min-height: 1.4em;
+    }
+
+    .controls { display:flex; gap:10px; }
+
+    button {
+      margin-top: 10px;
+      padding: 10px 18px;
+      font-size: 1rem;
+      background-color: #5309A6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    button:hover { background-color: #3e0785; }
+
+    #question { font-size: 1.2rem; margin-bottom: 6px; }
+
+    @media (max-width:600px){
+      .answersRow{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+
+  <div id="startScreen" class="show">
+    <img src="logo.png" alt="Logó" id="logo">
+    <h1>Kalóz Kvíz</h1>
+    <button id="startBtn">KEZDÉS</button>
+  </div>
+
+  <div id="quizContainer" aria-live="polite">
+    <div id="question">Betöltés...</div>
+    <div id="answers" class="answersRow" role="list"></div>
+    <div id="timer" aria-atomic="true"></div>
+    <div class="controls">
+      <button id="showAnswerBtn">Mutasd a helyes választ</button>
+      <button id="nextBtn" style="display:none;">Következő kérdés</button>
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const startScreen = document.getElementById("startScreen");
+    const startBtn = document.getElementById("startBtn");
+    const quizContainer = document.getElementById("quizContainer");
+    const questionEl = document.getElementById("question");
+    const answersEl = document.getElementById("answers");
+    const nextBtn = document.getElementById("nextBtn");
+    const showAnswerBtn = document.getElementById("showAnswerBtn");
+    const timerEl = document.getElementById("timer");
+
+    // State
+    let currentIndex = 0;
+    let timerInterval = null;
+    let timeLeft = 0;
+
+    // 50 nehéz kérdés — minden kérdés más témakör
+    const questions = [
+      { q: "Melyik évben fejezték be a kínai Nagy Fal fő szakaszainak építését?", options: ["1644", "1206", "1789"], answer: "1644" },
+      { q: "Melyik nyelv a világ legrégebbi ma is beszélt indoeurópai nyelve?", options: ["Görög", "Albán", "Örmény"], answer: "Görög" },
+      { q: "Ki festette A geográfus című festményt?", options: ["Vermeer", "Rembrandt", "Caravaggio"], answer: "Vermeer" },
+      { q: "Melyik évben írták alá a Magna Cartát?", options: ["1215", "1307", "1190"], answer: "1215" },
+      { q: "Melyik tudós írta le először matematikailag a szivárvány jelenségét?", options: ["Descartes", "Newton", "Huygens"], answer: "Descartes" },
+      { q: "Melyik birodalom fővárosa volt Tenochtitlán?", options: ["Azték", "Inka", "Maya"], answer: "Azték" },
+      { q: "Hol található a világ legrégebbi ismert könyvtára?", options: ["Alexandria", "Pergamon", "Ninive"], answer: "Alexandria" },
+      { q: "Ki alkotta meg a Fibonacci-sorozatot?", options: ["Leonardo Pisano", "Euler", "Al-Hvárizmi"], answer: "Leonardo Pisano" },
+      { q: "Melyik ókori filozófus tanította Nagy Sándort?", options: ["Arisztotelész", "Platón", "Szókratész"], answer: "Arisztotelész" },
+      { q: "Melyik zeneszerző írta a Bolerót?", options: ["Ravel", "Debussy", "Saint-Saëns"], answer: "Ravel" },
+      { q: "Melyik országban található a Göbekli Tepe?", options: ["Törökország", "Irán", "Jordánia"], answer: "Törökország" },
+      { q: "Melyik évben indult az első Voyager űrszonda?", options: ["1977", "1982", "1969"], answer: "1977" },
+      { q: "Ki rendezte a Szárnyas fejvadász (Blade Runner) című filmet?", options: ["Ridley Scott", "James Cameron", "Stanley Kubrick"], answer: "Ridley Scott" },
+      { q: "Melyik évben omlott össze a Nyugatrómai Birodalom?", options: ["476", "410", "535"], answer: "476" },
+      { q: "Ki írta A mester és Margarita című regényt?", options: ["Bulgakov", "Nabokov", "Paszternak"], answer: "Bulgakov" },
+      { q: "Melyik ország zászlaján látható a világ legrégebben használt nemzeti zászlója?", options: ["Dánia", "Svájc", "Ausztria"], answer: "Dánia" },
+      { q: "Melyik elemnek a legmagasabb az olvadáspontja?", options: ["Volfrám", "Irídium", "Titán"], answer: "Volfrám" },
+      { q: "Melyik évben jelent meg az első iPhone?", options: ["2007", "2005", "2009"], answer: "2007" },
+      { q: "Melyik regény kezdődik azzal, hogy 'Minden boldog család egyforma…'?", options: ["Anna Karenina", "Háború és béke", "Bűn és bűnhődés"], answer: "Anna Karenina" },
+      { q: "Ki írta a The Dark Side of the Moon albumot?", options: ["Pink Floyd", "The Who", "Led Zeppelin"], answer: "Pink Floyd" },
+      { q: "Hol található Machu Picchu?", options: ["Peru", "Bolívia", "Ecuador"], answer: "Peru" },
+      { q: "Melyik matematikus tette híressé a 'hány hídon lehet végigmenni?' problémát?", options: ["Euler", "Gauss", "Dirichlet"], answer: "Euler" },
+      { q: "Ki komponálta a Carmina Burana-t?", options: ["Carl Orff", "Igor Stravinsky", "Kodály Zoltán"], answer: "Carl Orff" },
+      { q: "Melyik évből származik a világ legrégebbi fennmaradt nyomtatott könyve (Gyémánt szútra)?", options: ["868", "1042", "1204"], answer: "868" },
+      { q: "Melyik országban található az Atacama-sivatag?", options: ["Chile", "Peru", "Argentína"], answer: "Chile" },
+      { q: "Melyik filmben hangzik el a 'Here’s Johnny!' jelenet?", options: ["The Shining", "Psycho", "Halloween"], answer: "The Shining" },
+      { q: "Melyik évben jutott fel először ember a Mount Everestre?", options: ["1953", "1961", "1947"], answer: "1953" },
+      { q: "Ki fedezte fel az elektron töltését meghatározó híres 'olajcsepp-kísérletet'?", options: ["Millikan", "Rutherford", "Maxwell"], answer: "Millikan" },
+      { q: "Melyik európai városban található az oroszlánok terét díszítő reneszánsz Dávid-szobor?", options: ["Firenze", "Róma", "Bologna"], answer: "Firenze" },
+      { q: "Ki tervezte az Eiffel-tornyot?", options: ["Gustave Eiffel", "Le Corbusier", "Haussmann"], answer: "Gustave Eiffel" },
+      { q: "Melyik évben jött létre az ENSZ?", options: ["1945", "1939", "1950"], answer: "1945" },
+      { q: "Ki írta a Trónok harca könyvsorozatot?", options: ["George R. R. Martin", "Robert Jordan", "Brandon Sanderson"], answer: "George R. R. Martin" },
+      { q: "Melyik bolygón található az Olympus Mons?", options: ["Mars", "Vénusz", "Merkúr"], answer: "Mars" },
+      { q: "Ki találta fel a modern periódusos rendszert?", options: ["Mengyelejev", "Dalton", "Lavoisier"], answer: "Mengyelejev" },
+      { q: "Melyik évben kezdődött a reneszánsz korszak általánosan elfogadott kezdete?", options: ["1401", "1300", "1500"], answer: "1401" },
+      { q: "Hol található a világ legnagyobb korallzátony (Great Barrier Reef)?", options: ["Ausztrália", "Fülöp-szigetek", "Indonézia"], answer: "Ausztrália" },
+      { q: "Ki készítette a The Wall albumot?", options: ["Pink Floyd", "Led Zeppelin", "Queen"], answer: "Pink Floyd" },
+      { q: "Melyik birodalom fővárosa volt Akkád?", options: ["A sumér", "A hettita", "A babiloni"], answer: "A sumér" },
+      { q: "Ki írta A közöny című regényt?", options: ["Albert Camus", "Sartre", "Kafka"], answer: "Albert Camus" },
+      { q: "Melyik országban található Angkor Wat?", options: ["Kambodzsa", "Laosz", "Vietnam"], answer: "Kambodzsa" },
+      { q: "Ki festette A sikoly című képet?", options: ["Edvard Munch", "Monet", "Manet"], answer: "Edvard Munch" },
+      { q: "Melyik évben kezdődött a Francia Forradalom?", options: ["1789", "1776", "1799"], answer: "1789" },
+      { q: "Ki énekelte eredetileg a 'Hallelujah' című dalt?", options: ["Leonard Cohen", "Jeff Buckley", "Bob Dylan"], answer: "Leonard Cohen" },
+      { q: "Ki fejlesztette ki a relativitáselméletet?", options: ["Einstein", "Lorentz", "Planck"], answer: "Einstein" },
+      { q: "Hol található a világ legmélyebb tava?", options: ["Bajkál-tó", "Tanganyika-tó", "Kaspikum"], answer: "Bajkál-tó" },
+      { q: "Ki írta a Don Quijotét?", options: ["Cervantes", "Lope de Vega", "Calderón"], answer: "Cervantes" },
+      { q: "Melyik bolygó keringése tart a leghosszabb ideig a Nap körül?", options: ["Neptunusz", "Jupiter", "Uránusz"], answer: "Neptunusz" },
+      { q: "Ki rendezte az Eredet (Inception) című filmet?", options: ["Christopher Nolan", "Denis Villeneuve", "David Fincher"], answer: "Christopher Nolan" },
+      { q: "Melyik országban található Timbuktu?", options: ["Mali", "Niger", "Szenegál"], answer: "Mali" },
+      { q: "Melyik filozófus írta az Állam című művet?", options: ["Platón", "Arisztotelész", "Epikurosz"], answer: "Platón" }
+    ];
+
+    // Utility functions
+    function shuffle(array) {
+      // Fisher-Yates shuffle for unbiased randomization
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function startQuiz() {
+      // hide start, show quiz
+      startScreen.classList.remove("show");
+      quizContainer.classList.add("show");
+      // randomize question order on start
+      shuffle(questions);
+      currentIndex = 0;
+      showQuestion();
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timeLeft = 120; // 2 minutes
+      timerEl.style.color = 'red';
+      timerEl.textContent = `Hátralévő idő: ${timeLeft}s`;
+
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft > 0) {
+          timerEl.textContent = `Hátralévő idő: ${timeLeft}s`;
+        } else {
+          clearInterval(timerInterval);
+          timerEl.textContent = "LEJÁRT AZ IDŐ, KÉREM A VÁLASZOKAT!";
+        }
+      }, 1000);
+    }
+
+    function showQuestion() {
+      if (currentIndex >= questions.length) {
+        questionEl.textContent = "Vége a kvíznek!";
+        answersEl.innerHTML = "";
+        showAnswerBtn.style.display = "none";
+        nextBtn.style.display = "none";
+        timerEl.textContent = "";
+        return;
+      }
+
+      const current = questions[currentIndex];
+      questionEl.textContent = current.q;
+      answersEl.innerHTML = "";
+
+      // create randomized options and assign fixed color classes in order
+      const opts = shuffle([...current.options]);
+      const colorClasses = ["sand","scarlet","dirtyblue"];
+
+      opts.forEach((opt, i) => {
+        const div = document.createElement('div');
+        div.className = `answerOption ${colorClasses[i]}`;
+        div.textContent = opt;
+        answersEl.appendChild(div);
+      });
+
+      // reset controls
+      showAnswerBtn.style.display = 'inline-block';
+      nextBtn.style.display = 'none';
+
+      // start timer for this question
+      startTimer();
+    }
+
+    showAnswerBtn.addEventListener('click', () => {
+      const current = questions[currentIndex];
+      const options = Array.from(document.querySelectorAll('.answerOption'));
+
+      // stop timer
+      clearInterval(timerInterval);
+
+      // highlight correct option with green outline only, leave background & text colors intact
+      options.forEach(optEl => {
+        if (optEl.textContent === current.answer) {
+          optEl.classList.add('correct');
+        } else {
+          optEl.style.background = '#e0e0e0'; // világos szürke
+          optEl.style.color = 'black';
+        }
+      });
+
+      // if the timer displayed the expiry message, hide it when answer shown
+      if (timerEl.textContent.includes('LEJÁRT AZ IDŐ')) {
+        timerEl.textContent = '';
+      }
+
+      // change timer color to white while showing answer (per user request)
+      timerEl.style.color = 'white';
+
+      showAnswerBtn.style.display = 'none';
+      nextBtn.style.display = 'inline-block';
+    });
+
+    nextBtn.addEventListener('click', () => {
+      // restore timer color for next question and advance
+      timerEl.style.color = 'red';
+      currentIndex++;
+      // remove any outline from previous options
+      const prev = document.querySelectorAll('.answerOption.correct');
+      prev.forEach(el => el.classList.remove('correct'));
+      showQuestion();
+    });
+
+    // wire up start button
+    startBtn.addEventListener('click', startQuiz);
+
+    // Accessibility: allow Enter to start when focused
+    startBtn.addEventListener('keyup', (e) => { if (e.key === 'Enter') startQuiz(); });
+
+  </script>
+</body>
+</html>
